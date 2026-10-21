@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head><title>PanDa3 - Rejestracja</title></head>
+<body>
+    <h2>Rejestracja</h2>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul style="color: red;">
+        {% for message in messages %}
+          <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <label>Email:</label><br>
+        <input type="email" name="email" required><br><br>
+
+        <label>Hasło:</label><br>
+        <input type="password" name="password" required><br><br>
+
+        <label>Rola:</label><br>
+        <select name="role" id="role-select" onchange="togglePWZ()">
+            <option value="owner">Właściciel</option>
+            <option value="vet">Weterynarz</option>
+        </select><br><br>
+
+        <div id="pwz-div" style="display:none;">
+            <label>Numer PWZ:</label><br>
+            <input type="text" name="pwz_number"><br><br>
+        </div>
+
+        <button type="submit">Zarejestruj</button>
+    </form>
+
+    <script>
+        function togglePWZ() {
+            var role = document.getElementById("role-select").value;
+            var pwzDiv = document.getElementById("pwz-div");
+            if (role === "vet") {
+                pwzDiv.style.display = "block";
+            } else {
+                pwzDiv.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+instance/
+*.db
+*.sqlite3
+venv/
+env/
+__pycache__/
+*.pyc
+.env
+uploads/
+static/avatars/
+.idea/
+.vscode/
