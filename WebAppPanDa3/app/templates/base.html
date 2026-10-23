@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PanDa3{% endblock %}</title>
+</head>
+<body>
+    <header>
+        <a href="/"><strong>PanDa3</strong></a>
+        {% if current_user.is_authenticated %}
+            <span>
+                {{ current_user.first_name }} {{ current_user.last_name }}
+                ({{ 'Lekarz' if current_user.role == 'vet' else 'Właściciel' }})
+            </span>
+            <form action="/logout" method="POST" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit">Wyloguj</button>
+            </form>
+        {% endif %}
+    </header>
+    <hr>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            <ul>
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</body>
+</html>

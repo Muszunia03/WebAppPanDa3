@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}PanDa3{% endblock %}
+
+{% block content %}
+<h1>Witaj w PanDa3!</h1>
+<p>System zarządzania historią medyczną zwierząt. Udostępniaj kartoteki lekarzom weterynarii za pomocą kodów jednorazowych.</p>
+
+{% if not current_user.is_authenticated %}
+    <p>
+        <a href="/login">Zaloguj się</a> |
+        <a href="/register">Zarejestruj się</a>
+    </p>
+{% else %}
+    <p><a href="/dashboard">Przejdź do panelu</a></p>
+{% endif %}
+
+<h2>Jak to działa?</h2>
+<ol>
+    <li>Dodaj dane i skany swojego zwierzaka.</li>
+    <li>Wygeneruj kod dostępu (1h / 24h / 7 dni).</li>
+    <li>Lekarz wpisuje kod, pobiera wyniki i dodaje wpis do historii.</li>
+</ol>
+
+<hr>
+<footer>© 2026 PanDa3 • Politechnika Śląska</footer>
+{% endblock %}
