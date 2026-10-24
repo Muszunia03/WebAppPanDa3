@@ -3,10 +3,13 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import (LoginManager, UserMixin, login_user, login_required, logout_user, current_user)
-from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask import Flask, render_template, request, session, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import (LoginManager, UserMixin, login_user, login_required,
+                         logout_user, current_user)
+from flask_wtf.csrf import CSRFProtect, CSRFError
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
@@ -32,11 +35,37 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SECURE'] = env_bool('SESSION_COOKIE_SECURE', False)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+AVATAR_FOLDER = os.path.join(BASE_DIR, 'static', 'avatars')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['AVATAR_FOLDER'] = AVATAR_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(AVATAR_FOLDER, exist_ok=True)
+
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # limit 5 MB
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
+IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+FILE_SIGNATURES = {
+    'pdf': (b'%PDF',),
+    'png': (b'\x89PNG\r\n\x1a\n',),
+    'jpg': (b'\xff\xd8\xff',),
+    'jpeg': (b'\xff\xd8\xff',),
+}
+
 db = SQLAlchemy(app)
 csrf = CSRFProtect(app)
 
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["1000 per day", "300 per hour"],
+    default_limits_exempt_when=lambda: request.endpoint == 'static',
+    storage_uri="memory://"
+)
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
 
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
@@ -84,30 +113,68 @@ class AccessCode(db.Model):
     pet_id = db.Column(db.Integer, db.ForeignKey('pet.id'), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
 
+
 with app.app_context():
     db.create_all()
 
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/health')
-def health():
-    return jsonify({"status": "ok"}), 200
-
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
 
 @app.before_request
 def make_session_permanent():
     if request.endpoint not in ('static', 'health'):
         session.permanent = True
 
+
+def get_extension(filename):
+    return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+
+
+def allowed_file(filename, allowed=ALLOWED_EXTENSIONS):
+    return get_extension(filename) in allowed
+
+
+def file_signature_ok(file_storage):
+    ext = get_extension(file_storage.filename)
+    header = file_storage.stream.read(8)
+    file_storage.stream.seek(0)
+    return any(header.startswith(sig) for sig in FILE_SIGNATURES.get(ext, ()))
+
+
+def validate_upload(file_storage, allowed=ALLOWED_EXTENSIONS):
+    if not allowed_file(file_storage.filename, allowed):
+        return 'Niedozwolony format pliku. Dozwolone: ' + ', '.join(sorted(allowed)) + '.'
+    if not file_signature_ok(file_storage):
+        return 'Zawartość pliku nie zgadza się z jego rozszerzeniem.'
+    return None
+
+
+def remove_file(folder, filename):
+    if not filename:
+        return
+    path = os.path.join(folder, filename)
+    if os.path.exists(path):
+        os.remove(path)
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/health')
+@limiter.exempt
+def health():
+    return jsonify({"status": "ok"}), 200
+
+
 @app.errorhandler(CSRFError)
 def csrf_error(e):
-    return "Nieprawidłowy lub brakujący token", 400
+    return "Nieprawidłowy lub brakujący token.", 400
+
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -131,13 +198,14 @@ def too_large(e):
 
 @app.errorhandler(429)
 def ratelimit_error(e):
-    return "Wykryto zbyt wiele prób! Ze względów bezpieczeństwa odczekaj chwilę przed kolejną próbą.", 429
+    return "Wykryto zbyt wiele prób!", 429
 
 
 @app.errorhandler(500)
 def server_error(e):
     db.session.rollback()
     return "Wewnętrzny błąd serwera.", 500
+
 
 if __name__ == '__main__':
     app.run(host=os.environ.get('HOST') or '127.0.0.1',
