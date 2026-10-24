@@ -3,11 +3,10 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import (LoginManager, UserMixin, login_user, login_required,
-                         logout_user, current_user)
+from flask_login import (LoginManager, UserMixin, login_user, login_required, logout_user, current_user)
 from flask_wtf.csrf import CSRFProtect, CSRFError
+from flask import Flask, render_template, request, session, jsonify
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
@@ -89,24 +88,56 @@ with app.app_context():
     db.create_all()
 
 
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok"}), 200
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
-
 
 @app.before_request
 def make_session_permanent():
     if request.endpoint not in ('static', 'health'):
         session.permanent = True
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 @app.errorhandler(CSRFError)
 def csrf_error(e):
     return "Nieprawidłowy lub brakujący token", 400
 
+@app.errorhandler(400)
+def bad_request(e):
+    return "Nieprawidłowe żądanie.", 400
+
+
+@app.errorhandler(403)
+def forbidden(e):
+    return "Brak dostępu.", 403
+
+
+@app.errorhandler(404)
+def not_found(e):
+    return "Nie znaleziono strony.", 404
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return "Plik jest za duży (maksymalnie 5 MB).", 413
+
+
+@app.errorhandler(429)
+def ratelimit_error(e):
+    return "Wykryto zbyt wiele prób! Ze względów bezpieczeństwa odczekaj chwilę przed kolejną próbą.", 429
+
+
+@app.errorhandler(500)
+def server_error(e):
+    db.session.rollback()
+    return "Wewnętrzny błąd serwera.", 500
 
 if __name__ == '__main__':
     app.run(host=os.environ.get('HOST') or '127.0.0.1',
