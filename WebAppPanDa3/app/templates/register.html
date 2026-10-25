@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Rejestracja{% endblock %}
+
+{% block content %}
+<h1>Rejestracja</h1>
+
+<form method="POST" action="/register">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+    <p>
+        <label>Imię:<br>
+        <input type="text" name="first_name" maxlength="50" required></label>
+    </p>
+    <p>
+        <label>Nazwisko:<br>
+        <input type="text" name="last_name" maxlength="50" required></label>
+    </p>
+    <p>
+        <label>Email:<br>
+        <input type="email" name="email" maxlength="120" required></label>
+    </p>
+    <p>
+        <label>Hasło (min. 8 znaków, litera i cyfra):<br>
+        <input type="password" name="password" minlength="8" maxlength="128" required></label>
+    </p>
+    <p>
+        <label>Rola:<br>
+        <select name="role" required>
+            <option value="owner">Właściciel</option>
+            <option value="vet">Weterynarz</option>
+        </select></label>
+    </p>
+    <p>
+        <label>Numer PWZ (tylko dla weterynarza, 5-10 cyfr):<br>
+        <input type="text" name="pwz_number" maxlength="10"></label>
+    </p>
+
+    <button type="submit">Zarejestruj się</button>
+</form>
+
+<p>Masz już konto? <a href="/login">Zaloguj się</a></p>
+{% endblock %}

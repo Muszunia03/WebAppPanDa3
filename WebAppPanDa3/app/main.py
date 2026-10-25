@@ -1,15 +1,18 @@
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, session, jsonify
+from flask import (Flask, render_template, request, session, jsonify,
+                   redirect, url_for, flash)
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (LoginManager, UserMixin, login_user, login_required,
                          logout_user, current_user)
 from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.security import generate_password_hash, check_password_hash
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
@@ -42,7 +45,7 @@ app.config['AVATAR_FOLDER'] = AVATAR_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(AVATAR_FOLDER, exist_ok=True)
 
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # limit 5 MB
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 FILE_SIGNATURES = {
@@ -159,6 +162,26 @@ def remove_file(folder, filename):
     if os.path.exists(path):
         os.remove(path)
 
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+PWZ_RE = re.compile(r"^\d{5,10}$")
+
+def validate_registration(email, password, first_name, last_name, role, pwz_number):
+    """Zwraca komunikat błędu albo None."""
+    if role not in ('owner', 'vet'):
+        return 'Nieprawidłowa rola.'
+    if not first_name or not last_name:
+        return 'Imię i nazwisko są wymagane.'
+    if len(first_name) > 50 or len(last_name) > 50:
+        return 'Imię i nazwisko mogą mieć maksymalnie 50 znaków.'
+    if len(email) > 120 or not EMAIL_RE.match(email):
+        return 'Nieprawidłowy format adresu e-mail.'
+    if len(password) < 8 or len(password) > 128:
+        return 'Hasło musi mieć od 8 do 128 znaków.'
+    if not re.search(r'[A-Za-z]', password) or not re.search(r'\d', password):
+        return 'Hasło musi zawierać co najmniej jedną literę i jedną cyfrę.'
+    if role == 'vet' and not PWZ_RE.match(pwz_number):
+        return 'Weterynarz musi podać poprawny numer PWZ (5-10 cyfr).'
+    return None
 
 @app.route('/')
 def index():
@@ -170,6 +193,72 @@ def index():
 def health():
     return jsonify({"status": "ok"}), 200
 
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        role = (request.form.get('role') or '').strip()
+        pwz_number = (request.form.get('pwz_number') or '').strip()
+        first_name = (request.form.get('first_name') or '').strip()
+        last_name = (request.form.get('last_name') or '').strip()
+
+        error = validate_registration(email, password, first_name, last_name, role, pwz_number)
+        if error:
+            flash(error)
+            return render_template('register.html'), 400
+
+        if User.query.filter_by(email=email).first():
+            flash('Taki email jest już w bazie.')
+            return render_template('register.html'), 409
+
+        new_user = User(
+            email=email,
+            password_hash=generate_password_hash(password, method='scrypt'),
+            role=role,
+            pwz_number=pwz_number if role == 'vet' else None,
+            first_name=first_name,
+            last_name=last_name
+        )
+        db.session.add(new_user)
+        db.session.commit()
+
+        flash('Konto utworzone! Możesz się zalogować.')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+
+        if not email or not password:
+            flash('Podaj email i hasło.')
+            return render_template('login.html'), 400
+
+        user = User.query.filter_by(email=email).first()
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            return redirect(url_for('index'))
+
+        flash('Błędny email lub hasło.')
+        return render_template('login.html'), 401
+
+    return render_template('login.html')
+
+
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
 
 @app.errorhandler(CSRFError)
 def csrf_error(e):
