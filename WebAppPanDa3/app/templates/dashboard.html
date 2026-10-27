@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Panel główny{% endblock %}
+
+{% block content %}
+<h2>Panel Główny</h2>
+<p>Zalogowano jako: <strong>{{ current_user.email }}</strong>
+   (Rola: {{ 'Weterynarz' if current_user.role == 'vet' else 'Właściciel' }})</p>
+<hr>
+
+{% if current_user.role == 'owner' %}
+    <h3>Lista Twoich zwierzaków:</h3>
+    <ul>
+        {% for pet in pets %}
+            <li>
+                <strong>{{ pet.name }}</strong> (Gatunek: {{ pet.species }})
+                {# USUWANIE: odkomentuj w commicie z trasą delete_pet
+                <form action="{{ url_for('delete_pet', pet_id=pet.id) }}" method="POST" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" onclick="return confirm('Na pewno usunąć tego zwierzaka?');">Usuń</button>
+                </form>
+                #}
+            </li>
+        {% else %}
+            <li>Brak zwierzaków. Dodaj swojego pierwszego pupila!</li>
+        {% endfor %}
+    </ul>
+
+    <h4>Dodaj nowego zwierzaka</h4>
+    <form action="/add_pet" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <label>Imię zwierzaka:</label><br>
+        <input type="text" name="name" maxlength="100" required><br><br>
+
+        <label>Gatunek (np. Pies, Kot, Królik):</label><br>
+        <input type="text" name="species" maxlength="50" required><br><br>
+
+        <button type="submit">Dodaj do systemu</button>
+    </form>
+
+{% elif current_user.role == 'vet' %}
+    <h3>Panel Lekarza Weterynarii</h3>
+{% endif %}
+{% endblock %}

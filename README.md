@@ -39,6 +39,8 @@ Wszystkie wymagane biblioteki wraz z wersjami znajdują się w pliku `requiremen
 3. Zainstaluj zależności:
    ```
    pip install -r requirements.txt
+
+   pip install python-dotenv Flask Flask-SQLAlchemy Flask-Login Flask-WTF Flask-Limiter
    ```
 4. (Opcjonalnie) Skopiuj plik z przykładową konfiguracją i ustaw własne wartości:
    ```

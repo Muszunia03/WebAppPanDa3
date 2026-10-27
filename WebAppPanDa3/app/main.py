@@ -166,7 +166,6 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PWZ_RE = re.compile(r"^\d{5,10}$")
 
 def validate_registration(email, password, first_name, last_name, role, pwz_number):
-    """Zwraca komunikat błędu albo None."""
     if role not in ('owner', 'vet'):
         return 'Nieprawidłowa rola.'
     if not first_name or not last_name:
@@ -182,6 +181,23 @@ def validate_registration(email, password, first_name, last_name, role, pwz_numb
     if role == 'vet' and not PWZ_RE.match(pwz_number):
         return 'Weterynarz musi podać poprawny numer PWZ (5-10 cyfr).'
     return None
+
+def render_dashboard(status=200):
+    if current_user.role == 'owner':
+        pets = Pet.query.filter_by(owner_id=current_user.id).all()
+        return render_template('dashboard.html', pets=pets), status
+    return render_template('dashboard.html'), status
+
+def read_pet_form():
+    name = (request.form.get('name') or '').strip()
+    species = (request.form.get('species') or '').strip()
+    if species == 'Inne':
+        species = (request.form.get('species_other') or '').strip()
+    if not name or len(name) > 100:
+        return None, None, 'Imię zwierzaka jest wymagane (max 100 znaków).'
+    if not species or len(species) > 50:
+        return None, None, 'Gatunek jest wymagany (max 50 znaków).'
+    return name, species, None
 
 @app.route('/')
 def index():
@@ -231,9 +247,10 @@ def register():
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", exempt_when=lambda: request.method == 'GET')
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
@@ -246,7 +263,7 @@ def login():
         user = User.query.filter_by(email=email).first()
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            return redirect(url_for('index'))
+            return redirect(url_for('dashboard'))
 
         flash('Błędny email lub hasło.')
         return render_template('login.html'), 401
@@ -259,6 +276,29 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('index'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_dashboard()
+
+@app.route('/add_pet', methods=['POST'])
+@login_required
+def add_pet():
+    if current_user.role != 'owner':
+        return "Brak uprawnień", 403
+
+    name, species, error = read_pet_form()
+    if error:
+        flash(error)
+        return render_dashboard(400)
+
+    new_pet = Pet(name=name, species=species, owner_id=current_user.id)
+    db.session.add(new_pet)
+    db.session.commit()
+
+    flash('Zwierzak został dodany!')
+    return redirect(url_for('dashboard'))
 
 @app.errorhandler(CSRFError)
 def csrf_error(e):
