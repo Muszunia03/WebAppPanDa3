@@ -13,12 +13,11 @@
         {% for pet in pets %}
             <li>
                 <strong>{{ pet.name }}</strong> (Gatunek: {{ pet.species }})
-                {# USUWANIE: odkomentuj w commicie z trasą delete_pet
+                <a href="{{ url_for('view_pet', pet_id=pet.id) }}">Szczegóły</a>
                 <form action="{{ url_for('delete_pet', pet_id=pet.id) }}" method="POST" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" onclick="return confirm('Na pewno usunąć tego zwierzaka?');">Usuń</button>
                 </form>
-                #}
             </li>
         {% else %}
             <li>Brak zwierzaków. Dodaj swojego pierwszego pupila!</li>

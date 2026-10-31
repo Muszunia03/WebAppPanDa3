@@ -199,6 +199,13 @@ def read_pet_form():
         return None, None, 'Gatunek jest wymagany (max 50 znaków).'
     return name, species, None
 
+def render_pet_page(pet, status=200):
+    documents = Document.query.filter_by(pet_id=pet.id).all()
+    codes = AccessCode.query.filter_by(pet_id=pet.id).all()
+    records = MedicalRecord.query.filter_by(pet_id=pet.id).order_by(MedicalRecord.date.desc()).all()
+    return render_template('pet_detail.html', pet=pet, documents=documents,
+                           codes=codes, records=records), status
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -298,6 +305,54 @@ def add_pet():
     db.session.commit()
 
     flash('Zwierzak został dodany!')
+    return redirect(url_for('dashboard'))
+
+@app.route('/pet/<int:pet_id>')
+@login_required
+def view_pet(pet_id):
+    pet = db.session.get(Pet, pet_id)
+
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak dostępu! To nie jest twój zwierzak.", 403
+
+    return render_pet_page(pet)
+
+
+@app.route('/edit_pet/<int:pet_id>', methods=['POST'])
+@login_required
+def edit_pet(pet_id):
+    pet = db.session.get(Pet, pet_id)
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak dostępu!", 403
+
+    name, species, error = read_pet_form()
+    if error:
+        flash(error)
+        return render_pet_page(pet, 400)
+
+    pet.name = name
+    pet.species = species
+    db.session.commit()
+
+    flash('Dane pacjenta zostały zaktualizowane.')
+    return redirect(url_for('view_pet', pet_id=pet.id))
+
+
+@app.route('/delete_pet/<int:pet_id>', methods=['POST'])
+@login_required
+def delete_pet(pet_id):
+    pet = db.get_or_404(Pet, pet_id)
+
+    if pet.owner_id != current_user.id:
+        return "Brak dostępu! To nie jest twój zwierzak.", 403
+
+    remove_file(app.config['AVATAR_FOLDER'], pet.image_filename)
+    for doc in pet.documents:
+        remove_file(app.config['UPLOAD_FOLDER'], doc.filename)
+
+    db.session.delete(pet)
+    db.session.commit()
+    flash('Zwierzak i wszystkie powiązane z nim pliki zostały usunięte!')
     return redirect(url_for('dashboard'))
 
 @app.errorhandler(CSRFError)

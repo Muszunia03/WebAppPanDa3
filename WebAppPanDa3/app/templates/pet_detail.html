@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Profil: {{ pet.name }}{% endblock %}
+
+{% block content %}
+<p><a href="/dashboard">&larr; Powrót</a></p>
+
+<h2>{{ pet.name }}</h2>
+<p>Gatunek: {{ pet.species }}</p>
+
+{% set standard_species = ['Pies', 'Kot', 'Królik', 'Chomik', 'Świnka morska', 'Papuga', 'Żółw', 'Wąż', 'Jaszczurka'] %}
+<details>
+    <summary>Edytuj dane pacjenta</summary>
+    <form action="{{ url_for('edit_pet', pet_id=pet.id) }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+        <p>
+            <label>Imię pacjenta<br>
+            <input type="text" name="name" value="{{ pet.name }}" required></label>
+        </p>
+        <p>
+            <label>Gatunek<br>
+            <select name="species" id="edit-species-select" onchange="toggleEditSpeciesOther()" required>
+                {% for s in standard_species %}
+                    <option value="{{ s }}" {% if pet.species == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+                <option value="Inne" {% if pet.species not in standard_species %}selected{% endif %}>Inne (wpisz ręcznie)</option>
+            </select></label>
+        </p>
+        <p id="edit-species-other-div" {% if pet.species in standard_species %}style="display:none;"{% endif %}>
+            <input type="text" name="species_other" id="edit-species-other-input" placeholder="Podaj jaki to gatunek..." {% if pet.species not in standard_species %}value="{{ pet.species }}" required{% endif %}>
+        </p>
+        <button type="submit">Zapisz zmiany</button>
+    </form>
+</details>
+
+<script>
+    function toggleEditSpeciesOther() {
+        var select = document.getElementById("edit-species-select");
+        var otherDiv = document.getElementById("edit-species-other-div");
+        var otherInput = document.getElementById("edit-species-other-input");
+
+        if (select.value === "Inne") {
+            otherDiv.style.display = "block";
+            otherInput.required = true;
+        } else {
+            otherDiv.style.display = "none";
+            otherInput.required = false;
+        }
+    }
+</script>
+{% endblock %}
