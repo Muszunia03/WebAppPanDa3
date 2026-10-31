@@ -1,51 +1,89 @@
 {% extends "base.html" %}
-{% block title %}Profil: {{ pet.name }}{% endblock %}
+{% block title %}{{ pet.name }}{% endblock %}
 
 {% block content %}
-<p><a href="/dashboard">&larr; Powrót</a></p>
+<p><a href="/dashboard">&larr; Wróć do panelu</a></p>
 
 <h2>{{ pet.name }}</h2>
+{% if pet.image_filename %}
+    <img src="{{ url_for('static', filename='avatars/' ~ pet.image_filename) }}" alt="" width="120">
+{% endif %}
 <p>Gatunek: {{ pet.species }}</p>
 
-{% set standard_species = ['Pies', 'Kot', 'Królik', 'Chomik', 'Świnka morska', 'Papuga', 'Żółw', 'Wąż', 'Jaszczurka'] %}
-<details>
-    <summary>Edytuj dane pacjenta</summary>
-    <form action="{{ url_for('edit_pet', pet_id=pet.id) }}" method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+<h3>Edytuj dane</h3>
+<form action="/edit_pet/{{ pet.id }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label>Imię:</label>
+    <input type="text" name="name" value="{{ pet.name }}" maxlength="100" required>
+    <label>Gatunek:</label>
+    <input type="text" name="species" value="{{ pet.species }}" maxlength="50" required>
+    <button type="submit">Zapisz</button>
+</form>
 
-        <p>
-            <label>Imię pacjenta<br>
-            <input type="text" name="name" value="{{ pet.name }}" required></label>
-        </p>
-        <p>
-            <label>Gatunek<br>
-            <select name="species" id="edit-species-select" onchange="toggleEditSpeciesOther()" required>
-                {% for s in standard_species %}
-                    <option value="{{ s }}" {% if pet.species == s %}selected{% endif %}>{{ s }}</option>
-                {% endfor %}
-                <option value="Inne" {% if pet.species not in standard_species %}selected{% endif %}>Inne (wpisz ręcznie)</option>
-            </select></label>
-        </p>
-        <p id="edit-species-other-div" {% if pet.species in standard_species %}style="display:none;"{% endif %}>
-            <input type="text" name="species_other" id="edit-species-other-input" placeholder="Podaj jaki to gatunek..." {% if pet.species not in standard_species %}value="{{ pet.species }}" required{% endif %}>
-        </p>
-        <button type="submit">Zapisz zmiany</button>
-    </form>
-</details>
+<hr>
+<h3>Dokumenty</h3>
+<ul>
+    {% for doc in documents %}
+        <li>
+            {{ doc.original_filename }}
+            <a href="/download/{{ doc.id }}">Pobierz</a>
+            <form action="/delete_document/{{ doc.id }}" method="POST" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" onclick="return confirm('Usunąć dokument?');">Usuń</button>
+            </form>
+        </li>
+    {% else %}
+        <li>Brak dokumentów.</li>
+    {% endfor %}
+</ul>
 
-<script>
-    function toggleEditSpeciesOther() {
-        var select = document.getElementById("edit-species-select");
-        var otherDiv = document.getElementById("edit-species-other-div");
-        var otherInput = document.getElementById("edit-species-other-input");
+<form action="/pet/{{ pet.id }}" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label>Dodaj dokument (PDF, JPG, PNG, max 5 MB):</label>
+    <input type="file" name="document" accept=".pdf,.jpg,.jpeg,.png" required>
+    <button type="submit">Wgraj</button>
+</form>
 
-        if (select.value === "Inne") {
-            otherDiv.style.display = "block";
-            otherInput.required = true;
-        } else {
-            otherDiv.style.display = "none";
-            otherInput.required = false;
-        }
-    }
-</script>
+<hr>
+<h3>Kody dostępu dla weterynarza</h3>
+<form action="/generate_code/{{ pet.id }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <label>Ważność:</label>
+    <select name="expires_in">
+        <option value="1">1 godzina</option>
+        <option value="24" selected>24 godziny</option>
+        <option value="168">7 dni</option>
+    </select>
+    <button type="submit">Wygeneruj kod</button>
+</form>
+
+<ul>
+    {% for code in codes %}
+        <li>
+            <code>{{ code.code }}</code>
+            ({% if code.expires_at < now %}wygasł{% else %}ważny do {{ code.expires_at.strftime('%Y-%m-%d %H:%M') }} UTC{% endif %})
+            <form action="/revoke_code/{{ code.id }}" method="POST" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit">Odwołaj</button>
+            </form>
+        </li>
+    {% else %}
+        <li>Brak kodów.</li>
+    {% endfor %}
+</ul>
+
+<hr>
+<h3>Historia medyczna</h3>
+<ul>
+    {% for r in records %}
+        <li>
+            {{ r.date.strftime('%Y-%m-%d %H:%M') }}, lek. {{ r.vet.first_name }} {{ r.vet.last_name }}:
+            {{ r.diagnosis }}
+            {% if r.weight %} | waga: {{ r.weight }} kg{% endif %}
+            {% if r.temperature %} | temp.: {{ r.temperature }} °C{% endif %}
+        </li>
+    {% else %}
+        <li>Brak wpisów.</li>
+    {% endfor %}
+</ul>
 {% endblock %}

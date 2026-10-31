@@ -1,11 +1,12 @@
 import os
 import re
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 from flask import (Flask, render_template, request, session, jsonify,
-                   redirect, url_for, flash)
+                   redirect, url_for, flash, send_from_directory)
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import (LoginManager, UserMixin, login_user, login_required,
                          logout_user, current_user)
@@ -13,6 +14,7 @@ from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
@@ -69,7 +71,6 @@ limiter = Limiter(
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     first_name = db.Column(db.String(50), nullable=False)
@@ -116,7 +117,6 @@ class AccessCode(db.Model):
     pet_id = db.Column(db.Integer, db.ForeignKey('pet.id'), nullable=False)
     expires_at = db.Column(db.DateTime, nullable=False)
 
-
 with app.app_context():
     db.create_all()
 
@@ -130,7 +130,6 @@ def load_user(user_id):
 def make_session_permanent():
     if request.endpoint not in ('static', 'health'):
         session.permanent = True
-
 
 def get_extension(filename):
     return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
@@ -162,8 +161,16 @@ def remove_file(folder, filename):
     if os.path.exists(path):
         os.remove(path)
 
+
+def save_upload(file_storage, folder):
+    original = secure_filename(file_storage.filename) or 'plik'
+    stored = f"{uuid.uuid4()}_{original}"
+    file_storage.save(os.path.join(folder, stored))
+    return stored, original
+
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PWZ_RE = re.compile(r"^\d{5,10}$")
+
 
 def validate_registration(email, password, first_name, last_name, role, pwz_number):
     if role not in ('owner', 'vet'):
@@ -182,11 +189,6 @@ def validate_registration(email, password, first_name, last_name, role, pwz_numb
         return 'Weterynarz musi podać poprawny numer PWZ (5-10 cyfr).'
     return None
 
-def render_dashboard(status=200):
-    if current_user.role == 'owner':
-        pets = Pet.query.filter_by(owner_id=current_user.id).all()
-        return render_template('dashboard.html', pets=pets), status
-    return render_template('dashboard.html'), status
 
 def read_pet_form():
     name = (request.form.get('name') or '').strip()
@@ -199,12 +201,35 @@ def read_pet_form():
         return None, None, 'Gatunek jest wymagany (max 50 znaków).'
     return name, species, None
 
+
+def get_valid_access_code(code):
+    if not code:
+        return None
+    access = AccessCode.query.filter_by(code=code).first()
+    if not access or access.expires_at < utcnow():
+        return None
+    return access
+
+def render_dashboard(status=200):
+    if current_user.role == 'owner':
+        pets = Pet.query.filter_by(owner_id=current_user.id).all()
+        return render_template('dashboard.html', pets=pets), status
+    return render_template('dashboard.html'), status
+
+
 def render_pet_page(pet, status=200):
     documents = Document.query.filter_by(pet_id=pet.id).all()
     codes = AccessCode.query.filter_by(pet_id=pet.id).all()
     records = MedicalRecord.query.filter_by(pet_id=pet.id).order_by(MedicalRecord.date.desc()).all()
     return render_template('pet_detail.html', pet=pet, documents=documents,
-                           codes=codes, records=records), status
+                           codes=codes, records=records, now=utcnow()), status
+
+
+def render_vet_pet_page(pet, code, status=200):
+    documents = Document.query.filter_by(pet_id=pet.id).all()
+    records = MedicalRecord.query.filter_by(pet_id=pet.id).order_by(MedicalRecord.date.desc()).all()
+    return render_template('vet_pet_detail.html', pet=pet, documents=documents,
+                           records=records, current_code=code), status
 
 @app.route('/')
 def index():
@@ -215,7 +240,6 @@ def index():
 @limiter.exempt
 def health():
     return jsonify({"status": "ok"}), 200
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -289,6 +313,7 @@ def logout():
 def dashboard():
     return render_dashboard()
 
+
 @app.route('/add_pet', methods=['POST'])
 @login_required
 def add_pet():
@@ -300,20 +325,51 @@ def add_pet():
         flash(error)
         return render_dashboard(400)
 
-    new_pet = Pet(name=name, species=species, owner_id=current_user.id)
+    filename = None
+    image_file = request.files.get('pet_image')
+    if image_file and image_file.filename != '':
+        error = validate_upload(image_file, IMAGE_EXTENSIONS)
+        if error:
+            flash(error)
+            return render_dashboard(400)
+        filename, _ = save_upload(image_file, app.config['AVATAR_FOLDER'])
+
+    new_pet = Pet(name=name, species=species, owner_id=current_user.id, image_filename=filename)
     db.session.add(new_pet)
     db.session.commit()
 
     flash('Zwierzak został dodany!')
     return redirect(url_for('dashboard'))
 
-@app.route('/pet/<int:pet_id>')
+
+@app.route('/pet/<int:pet_id>', methods=['GET', 'POST'])
 @login_required
 def view_pet(pet_id):
     pet = db.session.get(Pet, pet_id)
 
     if not pet or pet.owner_id != current_user.id:
         return "Brak dostępu! To nie jest twój zwierzak.", 403
+
+    if request.method == 'POST':
+        file = request.files.get('document')
+        if file is None:
+            flash('Brak pliku w formularzu.')
+            return render_pet_page(pet, 400)
+        if file.filename == '':
+            flash('Nie wybrano żadnego pliku.')
+            return render_pet_page(pet, 400)
+
+        error = validate_upload(file)
+        if error:
+            flash(error)
+            return render_pet_page(pet, 400)
+
+        stored, original = save_upload(file, app.config['UPLOAD_FOLDER'])
+        db.session.add(Document(filename=stored, original_filename=original, pet_id=pet.id))
+        db.session.commit()
+
+        flash('Dokument został bezpiecznie wgrany!')
+        return redirect(url_for('view_pet', pet_id=pet.id))
 
     return render_pet_page(pet)
 
@@ -354,6 +410,168 @@ def delete_pet(pet_id):
     db.session.commit()
     flash('Zwierzak i wszystkie powiązane z nim pliki zostały usunięte!')
     return redirect(url_for('dashboard'))
+
+@app.route('/download/<int:doc_id>')
+@login_required
+def download_doc(doc_id):
+    doc = db.session.get(Document, doc_id)
+    if not doc:
+        return "Nie znaleziono pliku.", 404
+
+    pet = db.session.get(Pet, doc.pet_id)
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak autoryzacji do pobrania tego pliku.", 403
+
+    return send_from_directory(app.config['UPLOAD_FOLDER'], doc.filename, as_attachment=True,
+                               download_name=doc.original_filename)
+
+
+@app.route('/delete_document/<int:doc_id>', methods=['POST'])
+@login_required
+def delete_document(doc_id):
+    doc = db.session.get(Document, doc_id)
+    if not doc:
+        return "Dokument nie istnieje.", 404
+
+    pet = db.session.get(Pet, doc.pet_id)
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak autoryzacji do usunięcia tego pliku.", 403
+
+    remove_file(app.config['UPLOAD_FOLDER'], doc.filename)
+    db.session.delete(doc)
+    db.session.commit()
+    flash('Dokument medyczny został usunięty.')
+    return redirect(url_for('view_pet', pet_id=pet.id))
+
+@app.route('/generate_code/<int:pet_id>', methods=['POST'])
+@login_required
+def generate_code(pet_id):
+    pet = db.session.get(Pet, pet_id)
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak dostępu!", 403
+
+    try:
+        hours = int(request.form.get('expires_in', 24))
+        if hours not in (1, 24, 168):
+            hours = 24
+    except ValueError:
+        hours = 24
+
+    random_code = secrets.token_hex(8)
+    new_code = AccessCode(code=random_code, pet_id=pet.id,
+                          expires_at=utcnow() + timedelta(hours=hours))
+    db.session.add(new_code)
+    db.session.commit()
+
+    flash(f'Wygenerowano nowy kod ważny przez {hours}h: {random_code}')
+    return redirect(url_for('view_pet', pet_id=pet.id))
+
+
+@app.route('/revoke_code/<int:code_id>', methods=['POST'])
+@login_required
+def revoke_code(code_id):
+    code_obj = db.session.get(AccessCode, code_id)
+    if not code_obj:
+        return "Kod nie istnieje.", 404
+
+    pet = db.session.get(Pet, code_obj.pet_id)
+    if not pet or pet.owner_id != current_user.id:
+        return "Brak autoryzacji!", 403
+
+    db.session.delete(code_obj)
+    db.session.commit()
+    flash('Kod został pomyślnie odwołany.')
+    return redirect(url_for('view_pet', pet_id=pet.id))
+
+@app.route('/vet/access', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def vet_access():
+    if current_user.role != 'vet':
+        return "Brak uprawnień. Tylko weterynarz może używać kodów dostępu.", 403
+
+    code_input = (request.form.get('code') or '').strip()
+    if not code_input:
+        flash('Podaj kod dostępu.')
+        return render_dashboard(400)
+
+    if not get_valid_access_code(code_input):
+        flash('Podany kod jest nieprawidłowy lub już wygasł.')
+        return render_dashboard(403)
+
+    return redirect(url_for('vet_view_pet', code=code_input))
+
+
+@app.route('/vet/pet/<code>')
+@login_required
+def vet_view_pet(code):
+    if current_user.role != 'vet':
+        return "Brak uprawnień.", 403
+
+    access = get_valid_access_code(code)
+    if not access:
+        flash('Sesja dostępu wygasła.')
+        return render_dashboard(403)
+
+    pet = db.session.get(Pet, access.pet_id)
+    return render_vet_pet_page(pet, code)
+
+
+@app.route('/vet/download/<code>/<int:doc_id>')
+@login_required
+def vet_download_doc(code, doc_id):
+    if current_user.role != 'vet':
+        return "Brak uprawnień.", 403
+
+    access = get_valid_access_code(code)
+    if not access:
+        return "Brak dostępu. Kod wygasł lub jest nieprawidłowy.", 403
+
+    doc = db.session.get(Document, doc_id)
+    if not doc or doc.pet_id != access.pet_id:
+        return "Nie znaleziono pliku w tej kartotece.", 404
+
+    return send_from_directory(app.config['UPLOAD_FOLDER'], doc.filename, as_attachment=True,
+                               download_name=doc.original_filename)
+
+
+@app.route('/vet/add_record/<code>', methods=['POST'])
+@login_required
+def vet_add_record(code):
+    if current_user.role != 'vet':
+        return "Brak uprawnień.", 403
+
+    access = get_valid_access_code(code)
+    if not access:
+        return "Brak autoryzacji lub kod wygasł.", 403
+
+    pet = db.session.get(Pet, access.pet_id)
+    diagnosis = (request.form.get('diagnosis') or '').strip()
+    weight_raw = (request.form.get('weight') or '').strip().replace(',', '.')
+    temp_raw = (request.form.get('temperature') or '').strip().replace(',', '.')
+
+    if not diagnosis or len(diagnosis) > 5000:
+        flash('Diagnoza jest wymagana (max 5000 znaków).')
+        return render_vet_pet_page(pet, code, 400)
+
+    try:
+        weight = float(weight_raw) if weight_raw else None
+        temperature = float(temp_raw) if temp_raw else None
+    except ValueError:
+        flash('Waga i temperatura muszą być liczbami.')
+        return render_vet_pet_page(pet, code, 400)
+
+    if (weight is not None and not 0 < weight < 1000) or \
+       (temperature is not None and not 30 <= temperature <= 45):
+        flash('Waga lub temperatura poza dopuszczalnym zakresem.')
+        return render_vet_pet_page(pet, code, 400)
+
+    db.session.add(MedicalRecord(diagnosis=diagnosis, weight=weight, temperature=temperature,
+                                 pet_id=access.pet_id, vet_id=current_user.id))
+    db.session.commit()
+
+    flash('Pomyślnie dodano nowy wpis medyczny do kartoteki.')
+    return redirect(url_for('vet_view_pet', code=code))
 
 @app.errorhandler(CSRFError)
 def csrf_error(e):

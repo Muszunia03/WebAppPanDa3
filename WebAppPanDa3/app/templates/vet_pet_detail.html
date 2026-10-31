@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Kartoteka: {{ pet.name }}{% endblock %}
+
+{% block content %}
+<p><a href="/dashboard">&larr; Wróć do panelu</a></p>
+
+<h2>Kartoteka: {{ pet.name }}</h2>
+{% if pet.image_filename %}
+    <img src="{{ url_for('static', filename='avatars/' ~ pet.image_filename) }}" alt="" width="120">
+{% endif %}
+<p>Gatunek: {{ pet.species }}</p>
+
+<h3>Dokumenty</h3>
+<ul>
+    {% for doc in documents %}
+        <li>{{ doc.original_filename }}
+            <a href="/vet/download/{{ current_code }}/{{ doc.id }}">Pobierz</a></li>
+    {% else %}
+        <li>Brak dokumentów.</li>
+    {% endfor %}
+</ul>
+
+<hr>
+<h3>Historia medyczna</h3>
+<ul>
+    {% for r in records %}
+        <li>
+            {{ r.date.strftime('%Y-%m-%d %H:%M') }}, lek. {{ r.vet.first_name }} {{ r.vet.last_name }}:
+            {{ r.diagnosis }}
+            {% if r.weight %} | waga: {{ r.weight }} kg{% endif %}
+            {% if r.temperature %} | temp.: {{ r.temperature }} °C{% endif %}
+        </li>
+    {% else %}
+        <li>Brak wpisów.</li>
+    {% endfor %}
+</ul>
+
+<h3>Dodaj wpis z wizyty</h3>
+<form action="/vet/add_record/{{ current_code }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+    <p><label>Diagnoza:<br>
+        <textarea name="diagnosis" rows="4" cols="50" maxlength="5000" required></textarea></label></p>
+    <p><label>Waga (kg):
+        <input type="text" name="weight" maxlength="7"></label></p>
+    <p><label>Temperatura (°C):
+        <input type="text" name="temperature" maxlength="5"></label></p>
+    <button type="submit">Dodaj wpis</button>
+</form>
+{% endblock %}

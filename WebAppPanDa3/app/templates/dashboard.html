@@ -12,9 +12,12 @@
     <ul>
         {% for pet in pets %}
             <li>
-                <strong>{{ pet.name }}</strong> (Gatunek: {{ pet.species }})
-                <a href="{{ url_for('view_pet', pet_id=pet.id) }}">Szczegóły</a>
-                <form action="{{ url_for('delete_pet', pet_id=pet.id) }}" method="POST" style="display:inline;">
+                {% if pet.image_filename %}
+                    <img src="{{ url_for('static', filename='avatars/' ~ pet.image_filename) }}" alt="" width="60">
+                {% endif %}
+                <a href="/pet/{{ pet.id }}"><strong>{{ pet.name }}</strong></a>
+                (Gatunek: {{ pet.species }})
+                <form action="/delete_pet/{{ pet.id }}" method="POST" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" onclick="return confirm('Na pewno usunąć tego zwierzaka?');">Usuń</button>
                 </form>
@@ -25,19 +28,34 @@
     </ul>
 
     <h4>Dodaj nowego zwierzaka</h4>
-    <form action="/add_pet" method="POST">
+    <form action="/add_pet" method="POST" enctype="multipart/form-data">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
         <label>Imię zwierzaka:</label><br>
         <input type="text" name="name" maxlength="100" required><br><br>
 
-        <label>Gatunek (np. Pies, Kot, Królik):</label><br>
-        <input type="text" name="species" maxlength="50" required><br><br>
+        <label>Gatunek:</label><br>
+        <select name="species" required>
+            <option value="Pies">Pies</option>
+            <option value="Kot">Kot</option>
+            <option value="Królik">Królik</option>
+            <option value="Inne">Inne</option>
+        </select>
+        <input type="text" name="species_other" maxlength="50" placeholder="Jeśli Inne, wpisz gatunek"><br><br>
+
+        <label>Zdjęcie (opcjonalnie, JPG/PNG):</label><br>
+        <input type="file" name="pet_image" accept=".jpg,.jpeg,.png"><br><br>
 
         <button type="submit">Dodaj do systemu</button>
     </form>
 
 {% elif current_user.role == 'vet' %}
     <h3>Panel Lekarza Weterynarii</h3>
+    <p>Wpisz kod dostępu otrzymany od właściciela zwierzaka:</p>
+    <form action="/vet/access" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="text" name="code" maxlength="16" required>
+        <button type="submit">Otwórz kartotekę</button>
+    </form>
 {% endif %}
 {% endblock %}
