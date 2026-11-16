@@ -209,3 +209,20 @@ tests/            testy aplikacji (na tym etapie puste)
 requirements.txt  zależności wraz z wersjami
 README.md         dokumentacja
 ```
+
+Testy
+Narzędzie: pytest (Python). Testy znajdują się w katalogu tests/.
+
+Uruchomienie wszystkich testów jednym poleceniem (z katalogu głównego projektu, przy aktywnym środowisku wirtualnym):
+python -m pytest
+
+Testy nie wymagają pliku .env, ręcznej interakcji ani internetu. Działają na bazie SQLite w pamięci i na tymczasowych folderach, a każdy test sam tworzy potrzebne dane, więc można je uruchamiać w dowolnej kolejności.
+
+Zakres testów
+| Plik | Zakres |
+|---|---|
+| tests/test_unit_registration.py | 4 testy jednostkowe: walidacja rejestracji (dane poprawne, błędny e-mail, hasło bez cyfry, weterynarz bez PWZ) |
+| tests/test_unit_uploads_and_codes.py | 4 testy jednostkowe: walidacja plików (poprawny PDF, tekst udający PDF) i kody dostępu (ważny, wygasły) |
+| tests/test_integration.py | 5 testów integracyjnych: rejestracja i logowanie, zarządzanie zwierzakiem, dokumenty, przepływ weterynarza z kodem, odwołanie kodu |
+| tests/test_security.py | scenariusze bezpieczeństwa: dostęp do cudzych zasobów (403), złośliwe pliki, brak tokenu CSRF |
+| tests/test_health.py | test endpointu /health (kod 200 i {"status": "ok"}) |
