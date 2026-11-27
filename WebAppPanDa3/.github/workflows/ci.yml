@@ -1,0 +1,33 @@
+name: CI
+
+# Zdarzenia uruchamiające pipeline: każdy push (na dowolną gałąź) i każdy pull request
+on:
+  push:
+  pull_request:
+
+# Minimalne uprawnienia: pipeline tylko czyta kod repozytorium
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Testy (pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Pobranie kodu z repozytorium
+        uses: actions/checkout@v6
+
+      - name: Instalacja Pythona
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Instalacja zależności
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Uruchomienie testów
+        run: python -m pytest

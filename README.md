@@ -210,19 +210,37 @@ requirements.txt  zależności wraz z wersjami
 README.md         dokumentacja
 ```
 
-Testy
-Narzędzie: pytest (Python). Testy znajdują się w katalogu tests/.
+## Testy
+Narzędzie: **pytest** (Python). Testy znajdują się w katalogu `tests/`.
 
 Uruchomienie wszystkich testów jednym poleceniem (z katalogu głównego projektu, przy aktywnym środowisku wirtualnym):
+```
 python -m pytest
+```
+Testy nie wymagają pliku `.env`, ręcznej interakcji ani internetu. Działają na bazie SQLite w pamięci i na tymczasowych folderach, a każdy test sam tworzy potrzebne dane, więc można je uruchamiać w dowolnej kolejności.
 
-Testy nie wymagają pliku .env, ręcznej interakcji ani internetu. Działają na bazie SQLite w pamięci i na tymczasowych folderach, a każdy test sam tworzy potrzebne dane, więc można je uruchamiać w dowolnej kolejności.
-
-Zakres testów
+### Zakres testów
 | Plik | Zakres |
 |---|---|
-| tests/test_unit_registration.py | 4 testy jednostkowe: walidacja rejestracji (dane poprawne, błędny e-mail, hasło bez cyfry, weterynarz bez PWZ) |
-| tests/test_unit_uploads_and_codes.py | 4 testy jednostkowe: walidacja plików (poprawny PDF, tekst udający PDF) i kody dostępu (ważny, wygasły) |
-| tests/test_integration.py | 5 testów integracyjnych: rejestracja i logowanie, zarządzanie zwierzakiem, dokumenty, przepływ weterynarza z kodem, odwołanie kodu |
-| tests/test_security.py | scenariusze bezpieczeństwa: dostęp do cudzych zasobów (403), złośliwe pliki, brak tokenu CSRF |
-| tests/test_health.py | test endpointu /health (kod 200 i {"status": "ok"}) |
+| `tests/test_unit_registration.py` | 4 testy jednostkowe: walidacja rejestracji (dane poprawne, błędny e-mail, hasło bez cyfry, weterynarz bez PWZ) |
+| `tests/test_unit_uploads_and_codes.py` | 4 testy jednostkowe: walidacja plików (poprawny PDF, tekst udający PDF) i kody dostępu (ważny, wygasły) |
+| `tests/test_integration.py` | 5 testów integracyjnych: rejestracja i logowanie, zarządzanie zwierzakiem, dokumenty, przepływ weterynarza z kodem, odwołanie kodu |
+| `tests/test_security.py` | scenariusze bezpieczeństwa: dostęp do cudzych zasobów (403), złośliwe pliki, brak tokenu CSRF |
+| `tests/test_health.py` | test endpointu `/health` (kod 200 i `{"status": "ok"}`) |
+
+## Ciągła integracja (CI)
+
+Narzędzie: **GitHub Actions**. Plik konfiguracyjny: `.github/workflows/ci.yml`.
+
+Pipeline uruchamia się automatycznie po każdym `push` i każdym `pull request`. Działa na runnerze `ubuntu-latest` i wykonuje kolejno:
+1. pobranie kodu z repozytorium (`actions/checkout`),
+2. przygotowanie środowiska: instalacja Pythona 3.14 (`actions/setup-python`) oraz zależności z `requirements.txt`,
+3. uruchomienie wszystkich testów poleceniem `python -m pytest`.
+
+Wynik widać w zakładce **Actions** oraz przy commicie i pull requeście (zielony znacznik, gdy wszystkie testy przechodzą, czerwony krzyżyk, gdy którykolwiek test nie przechodzi). Kod, przy którym pipeline kończy się błędem, nie powinien być scalany do głównej gałęzi.
+
+Te same kroki można wykonać lokalnie:
+```
+pip install -r requirements.txt
+python -m pytest
+```
