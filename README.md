@@ -229,6 +229,7 @@ Testy nie wymagają pliku `.env`, ręcznej interakcji ani internetu. Działają 
 | `tests/test_health.py` | test endpointu `/health` (kod 200 i `{"status": "ok"}`) |
 
 ## Ciągła integracja (CI)
+![CI](https://github.com/Muszunia03/WebAppPanDa3/actions/workflows/ci.yml/badge.svg)
 
 Narzędzie: **GitHub Actions**. Plik konfiguracyjny: `.github/workflows/ci.yml`.
 
@@ -237,10 +238,9 @@ Pipeline uruchamia się automatycznie po każdym `push` i każdym `pull request`
 2. przygotowanie środowiska: instalacja Pythona 3.14 (`actions/setup-python`) oraz zależności z `requirements.txt`,
 3. uruchomienie wszystkich testów poleceniem `python -m pytest`.
 
-Wynik widać w zakładce **Actions** oraz przy commicie i pull requeście (zielony znacznik, gdy wszystkie testy przechodzą, czerwony krzyżyk, gdy którykolwiek test nie przechodzi). Kod, przy którym pipeline kończy się błędem, nie powinien być scalany do głównej gałęzi.
+Wynik widać w zakładce **Actions** oraz przy commicie i pull requeście: zielony znacznik, gdy wszystkie testy przechodzą, czerwony krzyżyk, gdy którykolwiek test nie przechodzi. Kod, przy którym pipeline kończy się błędem, nie powinien być scalany do głównej gałęzi.
 
-Te same kroki można wykonać lokalnie:
-```
-pip install -r requirements.txt
-python -m pytest
-```
+### Jak sprawdzono działanie
+- Po `push` z poprawnym kodem pipeline kończy się powodzeniem (17 testów przechodzi).
+- Pull request z poprawnym kodem również uruchamia pipeline i kończy się powodzeniem.
+- Na osobnej gałęzi wprowadzono tymczasowy błąd (zmieniona odpowiedź endpointu `/health`). Pipeline uruchomił się automatycznie i wykrył błąd (test endpointu nie przeszedł). Gałąź z błędem została usunięta i nie trafiła do głównej gałęzi.
